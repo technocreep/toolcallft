@@ -1,0 +1,30 @@
+# Fine-tuning
+unsloth>=2024.12
+transformers>=5.0.0
+datasets>=2.20.0
+accelerate>=0.30.0
+peft>=0.11.0
+trl>=0.9.0
+bitsandbytes>=0.43.0
+
+pip install causal-conv1d
+pip install flash-linear-attention
+pip install tilelang
+# Evaluation
+bfcl-eval==2025.12.17
+
+# Experiment tracking
+mlflow>=2.13.0
+
+# Inference / load testing
+vllm>=0.4.0
+openai>=1.30.0
+aiohttp>=3.9.0
+httpx>=0.27.0
+
+# Utilities
+python-dotenv>=1.0.0
+pyyaml>=6.0
+numpy>=1.26.0
+pandas>=2.2.0
+tqdm>=4.66.0

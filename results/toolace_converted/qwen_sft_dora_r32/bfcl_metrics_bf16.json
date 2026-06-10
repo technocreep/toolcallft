@@ -1,0 +1,8 @@
+{
+  "bfcl_python_simple": 0.85,
+  "bfcl_python_multiple": 0.885,
+  "bfcl_python_parallel": 0.805,
+  "bfcl_python_parallel_multiple": 0.755,
+  "bfcl_python_irrelevance": 0.8875,
+  "bfcl_python_overall": 0.8365
+}

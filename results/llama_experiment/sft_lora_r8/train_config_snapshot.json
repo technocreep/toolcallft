@@ -1,0 +1,11 @@
+{
+  "run_name": "sft_lora_r8",
+  "model_id": "meta-llama/Llama-3.1-8B-Instruct",
+  "lora_rank": 8,
+  "lora_alpha": 16,
+  "learning_rate": 0.0002,
+  "batch_size": 8,
+  "epochs": 3,
+  "max_seq_length": 4096,
+  "qlora": false
+}

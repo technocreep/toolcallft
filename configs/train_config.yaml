@@ -1,0 +1,57 @@
+base_model: "Qwen/Qwen3.5-9B"
+dataset: "Team-ACE/ToolACE"
+
+# Common training hyperparameters
+defaults:
+  learning_rate: 2.0e-4
+  batch_size: 8
+  gradient_accumulation_steps: 4
+  epochs: 3
+  max_seq_length: 2048
+  warmup_ratio: 0.05
+  lr_scheduler: "cosine"
+  weight_decay: 0.01
+  dtype: "bfloat16"  # bf16 LoRA — QLoRA (4-bit) not recommended for Qwen3.5
+  save_strategy: "epoch"
+
+# LoRA-specific defaults
+lora_defaults:
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  lora_alpha_multiplier: 2  # lora_alpha = lora_rank * lora_alpha_multiplier
+  lora_dropout: 0.0
+  bias: "none"
+
+# Individual training runs
+runs:
+  sft_lora_r8:
+    method: "sft"
+    lora_rank: 8
+    learning_rate: 2.0e-4
+    batch_size: 8
+    epochs: 3
+
+  sft_lora_r32:
+    method: "sft"
+    lora_rank: 32
+    learning_rate: 1.0e-4
+    batch_size: 8
+    epochs: 3
+
+  sft_lora_r64:
+    method: "sft"
+    lora_rank: 64
+    learning_rate: 5.0e-5
+    batch_size: 4
+    epochs: 3
+
+  dpo_stub:
+    method: "dpo"
+    lora_rank: null
+    notes: "Stub only — DPO training logic not yet implemented"

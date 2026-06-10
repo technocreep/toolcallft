@@ -1,0 +1,31 @@
+candidate_models:
+  - id: "meta-llama/Llama-3.1-8B-Instruct"
+    notes: "General-purpose baseline"
+    max_model_len: 8192
+
+
+other_models:
+  - id: "Qwen/Qwen3.5-9B"
+    notes: "Target model for fine-tuning"
+    max_model_len: 8192
+
+  - id: "Qwen/Qwen3-14B"
+    notes: "Larger Qwen baseline"
+    max_model_len: 8192
+
+  - id: "MadeAgents/Hammer2.1-7b"
+    notes: "Specialized function-calling model (Qwen2.5 Coder base)"
+    max_model_len: 8192
+
+  - id: "Salesforce/Llama-xLAM-2-8b-fc-r"
+    notes: "Specialized function-calling model (Llama base)"
+    max_model_len: 8192
+
+  - id: "Team-ACE/ToolACE-2.5-Llama-3.1-8B"
+    notes: "Specialized function-calling model (Llama base)"
+    max_model_len: 8192
+
+vllm_defaults:
+  gpu_memory_utilization: 0.90
+  tensor_parallel_size: 1
+  dtype: "bfloat16"

@@ -1,0 +1,11 @@
+{
+  "model_id": "MadeAgents/Hammer2.1-7b",
+  "bfcl_python_simple": 0.9375,
+  "bfcl_python_multiple": 0.925,
+  "bfcl_python_parallel": 0.915,
+  "bfcl_python_parallel_multiple": 0.86,
+  "bfcl_python_irrelevance": 0.9125,
+  "bfcl_python_overall": 0.9099999999999999,
+  "eval_timestamp": "2026-06-05T15:18:24.369876+00:00",
+  "bfcl_eval_version": "2025.12.17"
+}
