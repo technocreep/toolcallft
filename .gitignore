@@ -6,6 +6,26 @@ __pycache__/
 # C extensions
 *.so
 
+# ML
+*.safetensors
+*.pth
+*.pt
+*.jinja
+tokenizer.json
+trainer_state.json
+tokenizer_config.json
+training_args.bin
+config.json
+adapter_config.json
+processor_config.json
+generation_config.json
+model.safetensors.index.json
+unsloth_compiled_cache/
+dataset_info.json
+state.json
+*.arrow
+*.db
+
 # Distribution / packaging
 .Python
 build/

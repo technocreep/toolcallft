@@ -306,7 +306,14 @@ def evaluate(merged_path: str, port: int, dtype: str, mlflow_run_name: str | Non
         logger.error("Merged model path does not exist: %s", merged_path)
         sys.exit(1)
 
-    vllm_dtype = "bfloat16" if dtype in ("bf16", "bfloat16") else dtype
+    # For online fp8 quantization vLLM needs --quantization fp8 with bfloat16
+    # compute dtype
+    if dtype == "fp8":
+        vllm_dtype = "bfloat16"
+        quantization_args = ["--quantization", "fp8"]
+    else:
+        vllm_dtype = "bfloat16" if dtype in ("bf16", "bfloat16") else dtype
+        quantization_args = []
 
     container_model_path = "/model"
     container_name = f"vllm-llama-eval-{port}"
@@ -327,9 +334,8 @@ def evaluate(merged_path: str, port: int, dtype: str, mlflow_run_name: str | Non
         "--dtype", vllm_dtype,
         "--trust-remote-code",
         "--max-model-len", "8192",
+        *quantization_args,
     ]
-    if dtype == "fp8":
-        cmd += ["--quantization", "fp8"]
 
     logger.info("Starting vLLM container (dtype=%s, logs → %s)", dtype, log_path)
     proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file)
@@ -380,7 +386,8 @@ def evaluate(merged_path: str, port: int, dtype: str, mlflow_run_name: str | Non
             log_bfcl_to_mlflow(metrics)
         logger.info("Logged to MLflow run '%s_toolace_eval'", run_name)
 
-        out = Path(merged_path).parent / "bfcl_metrics_toolace.json"
+        quant_suffix = f"_{dtype}" if dtype not in ("bf16", "bfloat16") else ""
+        out = Path(merged_path).parent / f"bfcl_metrics_toolace{quant_suffix}.json"
         out.write_text(json.dumps(metrics, indent=2))
         logger.info("Saved metrics to %s", out)
 
@@ -419,6 +426,14 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_args()
+    print(f"=========\n{args}\n===========")
+    # evaluate(
+    #     merged_path="results/llama_experiment/sft_qlora_r128/merged",
+    #     port=8000,
+    #     dtype="fp8",
+    #     mlflow_run_name="run",
+    #     mlflow_uri="http://localhost:5000",
+    # )
     evaluate(
         merged_path=args.merged_path,
         port=args.vllm_port,
