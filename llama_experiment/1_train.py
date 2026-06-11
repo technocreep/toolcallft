@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct"
 
-ALL_METHODS = ["sft_lora_r8", "sft_lora_r32", "sft_lora_r128", "sft_qlora_r8", "sft_qlora_r128", "sft_qlora_r256"]
+ALL_METHODS = ["sft_lora_r8", "sft_lora_r32", "sft_lora_r128", "sft_qlora_r8", "sft_qlora_r128", "sft_qlora_r128_reg", "sft_qlora_r256"]
 
 DEFAULTS = {
     "max_seq_length": 4096,
@@ -58,9 +58,11 @@ RUN_CONFIGS = {
     "sft_lora_r8":    {"lora_rank": 8,   "learning_rate": 2e-4, "qlora": False},
     "sft_lora_r32":   {"lora_rank": 32,  "learning_rate": 1e-4, "qlora": False},
     "sft_lora_r128":  {"lora_rank": 128, "learning_rate": 1e-4, "qlora": False},
-    "sft_qlora_r8":   {"lora_rank": 8,   "learning_rate": 2e-4, "qlora": True},
-    "sft_qlora_r128": {"lora_rank": 128, "learning_rate": 1e-4, "qlora": True},
-    "sft_qlora_r256": {"lora_rank": 256, "learning_rate": 1e-4, "qlora": True},
+    "sft_qlora_r8":       {"lora_rank": 8,   "learning_rate": 2e-4, "qlora": True},
+    "sft_qlora_r128":     {"lora_rank": 128, "learning_rate": 1e-4, "qlora": True},
+    "sft_qlora_r128_reg": {"lora_rank": 128, "learning_rate": 1e-4, "qlora": True, "lora_dropout": 0.05},
+    "sft_qlora_r128_reg_drop": {"lora_rank": 128, "learning_rate": 1e-4, "qlora": True, "lora_dropout": 0.1},
+    "sft_qlora_r256":     {"lora_rank": 256, "learning_rate": 1e-4, "qlora": True},
 }
 
 
@@ -120,12 +122,13 @@ def prepare_dataset(tokenizer):
 # SFT training
 # ---------------------------------------------------------------------------
 
-def run_sft(run_name: str, lora_rank: int, learning_rate: float, qlora: bool, model_id: str, results_dir: Path, vllm_port: int) -> None:
+def run_sft(run_name: str, lora_rank: int, learning_rate: float, qlora: bool, model_id: str, results_dir: Path, vllm_port: int, lora_dropout: float | None = None) -> None:
     from unsloth import FastLanguageModel  # type: ignore
     from trl import SFTTrainer, SFTConfig  # type: ignore
     from transformers import TrainerCallback, EarlyStoppingCallback  # type: ignore
 
     lora_alpha = lora_rank * LORA_DEFAULTS["lora_alpha_multiplier"]
+    lora_dropout = lora_dropout if lora_dropout is not None else LORA_DEFAULTS["lora_dropout"]
 
     run_results_dir = results_dir / run_name
     checkpoint_dir = run_results_dir / "checkpoints"
@@ -146,6 +149,7 @@ def run_sft(run_name: str, lora_rank: int, learning_rate: float, qlora: bool, mo
             "max_seq_length": DEFAULTS["max_seq_length"],
             "gradient_accumulation_steps": DEFAULTS["gradient_accumulation_steps"],
             "load_in_4bit": qlora,
+            "lora_dropout": lora_dropout,
         })
 
         logger.info("Loading model with Unsloth: %s (rank=%d)", model_id, lora_rank)
@@ -160,7 +164,7 @@ def run_sft(run_name: str, lora_rank: int, learning_rate: float, qlora: bool, mo
             model,
             r=lora_rank,
             lora_alpha=lora_alpha,
-            lora_dropout=LORA_DEFAULTS["lora_dropout"],
+            lora_dropout=lora_dropout,
             target_modules=LORA_DEFAULTS["target_modules"],
             bias=LORA_DEFAULTS["bias"],
             use_gradient_checkpointing="unsloth",
@@ -299,12 +303,15 @@ def main() -> None:
         lora_rank = cfg["lora_rank"]
         learning_rate = cfg["learning_rate"]
         qlora = cfg["qlora"]
-        logger.info("--- Starting run: %s (lora_rank=%d, lr=%.0e, qlora=%s) ---", run_name, lora_rank, learning_rate, qlora)
+        lora_dropout = cfg.get("lora_dropout")
+        logger.info("--- Starting run: %s (lora_rank=%d, lr=%.0e, qlora=%s, dropout=%.2f) ---",
+                    run_name, lora_rank, learning_rate, qlora, lora_dropout or LORA_DEFAULTS["lora_dropout"])
         run_sft(
             run_name=run_name,
             lora_rank=lora_rank,
             learning_rate=learning_rate,
             qlora=qlora,
+            lora_dropout=lora_dropout,
             model_id=args.model_id,
             results_dir=results_dir,
             vllm_port=args.vllm_port,
