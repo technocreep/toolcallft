@@ -1,0 +1,12 @@
+{
+  "run_name": "orpo_sft_v2",
+  "base_model": "/home/vadim/task/tool_calling_ft/results/llama_experiment/sft_qlora_r128/merged",
+  "method": "orpo",
+  "lora_rank": 32,
+  "lora_alpha": 64,
+  "learning_rate": 2e-06,
+  "beta": 0.02,
+  "epochs": 2,
+  "dataset_dir": "data/orpo_dataset_full",
+  "dataset_size": 6734
+}

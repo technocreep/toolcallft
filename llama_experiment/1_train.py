@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct"
 
-ALL_METHODS = ["sft_lora_r8", "sft_lora_r32", "sft_lora_r128", "sft_qlora_r128"]
+ALL_METHODS = ["sft_lora_r8", "sft_lora_r32", "sft_lora_r128", "sft_qlora_r8", "sft_qlora_r128", "sft_qlora_r256"]
 
 DEFAULTS = {
     "max_seq_length": 4096,
@@ -58,7 +58,9 @@ RUN_CONFIGS = {
     "sft_lora_r8":    {"lora_rank": 8,   "learning_rate": 2e-4, "qlora": False},
     "sft_lora_r32":   {"lora_rank": 32,  "learning_rate": 1e-4, "qlora": False},
     "sft_lora_r128":  {"lora_rank": 128, "learning_rate": 1e-4, "qlora": False},
+    "sft_qlora_r8":   {"lora_rank": 8,   "learning_rate": 2e-4, "qlora": True},
     "sft_qlora_r128": {"lora_rank": 128, "learning_rate": 1e-4, "qlora": True},
+    "sft_qlora_r256": {"lora_rank": 256, "learning_rate": 1e-4, "qlora": True},
 }
 
 
@@ -261,7 +263,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--method",
         default="all",
-        help="Training method: sft_lora_r8 | sft_lora_r32 | sft_lora_r128 | sft_qlora_r128 | all  (default: all)",
+        help="Training method: sft_lora_r8 | sft_lora_r32 | sft_lora_r128 | sft_qlora_r128 | sft_qlora_r256 | all  (default: all)",
     )
     parser.add_argument("--model-id", default=MODEL_ID)
     parser.add_argument(
