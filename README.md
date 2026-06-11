@@ -2,7 +2,7 @@
 
 Fine-tuning pipeline for improving LLM function-calling ability, targeting a FinTech use-case (financial workflow automation). Evaluated on the [Berkeley Function Calling Leaderboard (BFCL)](https://github.com/ShishirPatil/gorilla/tree/main/berkeley-function-call-leaderboard) Python subset.
 
-**Pipeline:** baseline eval → fine-tune (SFT LoRA / QLoRA) → merge → BFCL eval → latency bench
+**Pipeline:** baseline eval → fine-tune (SFT LoRA / QLoRA) → merge → BFCL eval → ORPO preference tuning → latency bench
 
 ---
 
@@ -59,25 +59,28 @@ Scripts in `llama_experiment/`. Training data: [Team-ACE/ToolACE](https://huggin
 ### Training script
 
 ```bash
-# Run all four experiments (sequential)
-python llama_experiment/1_train.py
-
 # Run a single method
 python llama_experiment/1_train.py --method sft_qlora_r128
+
+# Run all registered experiments (sequential)
+python llama_experiment/1_train.py --method all
 ```
 
-Four experiments, varying LoRA rank and quantization:
+Experiments, varying LoRA rank, quantization and regularization:
 
-| Run | Method | Rank | Alpha | LR | Quant |
-|---|---|---|---|---|---|
-| `sft_lora_r8` | SFT + LoRA | 8 | 16 | 2e-4 | BF16 |
-| `sft_lora_r32` | SFT + LoRA | 32 | 64 | 1e-4 | BF16 |
-| `sft_lora_r128` | SFT + LoRA | 128 | 256 | 1e-4 | BF16 |
-| `sft_qlora_r128` | SFT + QLoRA | 128 | 256 | 1e-4 | 4-bit base |
+| Run | Method | Rank | Alpha | LR | Quant | Dropout |
+|---|---|---|---|---|---|---|
+| `sft_lora_r8` | SFT + LoRA | 8 | 16 | 2e-4 | BF16 | 0.01 |
+| `sft_lora_r32` | SFT + LoRA | 32 | 64 | 1e-4 | BF16 | 0.01 |
+| `sft_lora_r128` | SFT + LoRA | 128 | 256 | 1e-4 | BF16 | 0.01 |
+| `sft_qlora_r8` | SFT + QLoRA | 8 | 16 | 2e-4 | 4-bit base | 0.01 |
+| `sft_qlora_r128` | SFT + QLoRA | 128 | 256 | 1e-4 | 4-bit base | 0.01 |
+| `sft_qlora_r128_reg` | SFT + QLoRA | 128 | 256 | 5e-5 | 4-bit base | 0.05 |
+| `sft_qlora_r256` | SFT + QLoRA | 256 | 512 | 1e-4 | 4-bit base | 0.01 |
 
 Common hyperparameters: batch size 8, gradient accumulation 4, 3 epochs, max seq len 4096, cosine LR schedule, weight decay 0.01. LoRA applied to all projection layers (q/k/v/o/gate/up/down).
 
-All runs logged to MLflow experiment `fine_tuning`. Checkpoints saved every 100 steps to `results/llama_experiment/<run_name>/checkpoints/`. Final adapters at `final/`, merged weights at `merged/`.
+All runs logged to MLflow experiment `fine_tuning`. Final adapters at `results/llama_experiment/<run_name>/final/`, merged weights at `merged/`.
 
 ### BFCL results after fine-tuning
 
@@ -91,24 +94,92 @@ python llama_experiment/2_eval.py --merged-path results/llama_experiment/sft_qlo
 | sft_lora_r8 | 0.883 | 0.928 | 0.930 | 0.890 | 0.760 | 0.908 |
 | sft_lora_r32 | 0.892 | 0.923 | 0.940 | 0.895 | 0.800 | 0.900 |
 | sft_lora_r128 | 0.885 | 0.905 | 0.940 | 0.895 | 0.775 | 0.908 |
+| sft_qlora_r256 | 0.887 | 0.858 | 0.935 | 0.890 | 0.820 | 0.933 |
 | **sft_qlora_r128** | **0.899** | 0.908 | 0.935 | 0.905 | 0.820 | **0.929** |
 
-**Best run: `sft_qlora_r128`** — QLoRA (4-bit base) with rank 128.  
+**Best SFT run: `sft_qlora_r128`** — QLoRA (4-bit base) with rank 128.  
 Delta vs baseline: **+0.085 overall**, **+0.462 irrelevance** (most impactful gain).
 
 Key observations:
 - Fine-tuning dramatically fixes false-positive tool calls (irrelevance: 0.467 → 0.929)
-- QLoRA r128 marginally beats full-precision LoRA r128 — the 4-bit regularization effect likely helps
-- Rank matters less than expected: r8 already yields most of the gain; r32/r128 add marginal improvement
+- QLoRA r128 beats full-precision LoRA r128 — 4-bit base acts as a regularizer, preserving pretrained knowledge
+- Rank 256 shows overfitting: simple score drops to 0.858 (−0.050 vs r128)
+- `sft_qlora_r128` selected as the base for ORPO experiments
 
 ---
 
-## Step 3 — Inference Optimization & Benchmarking
+---
+
+## Step 3 — ORPO Preference Tuning
+
+ORPO (Odds Ratio Preference Optimization) combines SFT loss and preference loss in a single pass — no reference model needed. Applied on top of `sft_qlora_r128`.
+
+See [`ORPO_doc.md`](ORPO_doc.md) for a detailed description of the pipeline and [`analysis/orpo_report.md`](analysis/orpo_report.md) for full experiment results.
+
+### Dataset generation
+
+```bash
+# Variant A: local vLLM (self-rejection — same model generates rejects)
+python llama_experiment/4_gen_orpo_dataset.py \
+    --merged-path results/llama_experiment/sft_qlora_r128/merged \
+    --output-dir data/orpo_dataset_full
+
+# Variant B: external model via OpenRouter (recommended — avoids self-rejection)
+export OPENROUTER_API_KEY=sk-or-...
+python llama_experiment/4b_gen_orpo_dataset_openrouter.py \
+    --model anthropic/claude-haiku-4-5 \
+    --output-dir data/orpo_dataset_haiku
+```
+
+Dataset: 7 485 preference pairs from ToolACE (chosen = ground truth, rejected = wrong model outputs). Saved as HuggingFace Arrow dataset.
+
+### Training
+
+```bash
+python llama_experiment/5_train_orpo.py \
+    --merged-path results/llama_experiment/sft_qlora_r128/merged \
+    --dataset-dir data/orpo_dataset_full \
+    --run-name orpo_sft_v2 \
+    --beta 0.02 --lr 2e-6 --lora-rank 32 \
+    --max-steps 600 --save-steps 25 --early-stopping-patience 5
+```
+
+Key parameters: `--beta` controls preference loss weight (0.02 = conservative, 0.1 = aggressive). `--early-stopping-patience` requires `--save-steps` to be set.
+
+To manually merge a specific checkpoint (not the final one):
+
+```bash
+python llama_experiment/5b_merge_checkpoint.py \
+    --base-model-path results/llama_experiment/sft_qlora_r128/merged \
+    --checkpoint-path results/llama_experiment/orpo_sft_v2/checkpoints/checkpoint-350 \
+    --output-path results/llama_experiment/orpo_sft_v2/merged_ckpt350
+```
+
+### BFCL results after ORPO
+
+| Run | Overall | Simple | Multiple | Parallel | Par+Multi | Irrelevance |
+|---|---|---|---|---|---|---|
+| Baseline | 0.814 | 0.943 | 0.955 | 0.875 | 0.830 | 0.467 |
+| sft_qlora_r128 | 0.899 | 0.908 | 0.935 | 0.905 | 0.820 | 0.929 |
+| orpo_r128_full (r64, lr=5e-6, β=0.1, 3ep) | 0.838 | 0.835 | 0.825 | 0.865 | 0.720 | 0.946 |
+| **orpo_sft_v2 (r32, lr=2e-6, β=0.02, 600 steps)** | **0.885** | 0.890 | 0.905 | 0.890 | 0.800 | 0.938 |
+| orpo_sft_v2_r128 (r128, lr=2e-6, β=0.02, 600 steps) | 0.879 | 0.875 | 0.890 | 0.890 | 0.800 | 0.938 |
+
+**Best ORPO run: `orpo_sft_v2`** (overall 0.885). Conservative hyperparameters prevented catastrophic forgetting.
+
+Key observations:
+- `orpo_r128_full`: aggressive lr + 3 epochs + no checkpoint selection → severe degradation (−0.061 vs SFT)
+- `orpo_sft_v2`: self-rejection problem caused negative reward margins throughout training; ORPO effectively acted as conservative extra SFT on chosen examples via NLL loss
+- ORPO did not surpass the SFT baseline (0.885 vs 0.899) — real preference alignment requires rejected samples from an external model (Variant B dataset)
+
+---
+
+## Step 4 — Inference Optimization & Benchmarking
 
 The best model (`sft_qlora_r128`) was served via vLLM in a Docker container and benchmarked at 8–64 concurrent requests.
 
 ```bash
-# BF16 (baseline precision)
+# BF16
 python llama_experiment/3_bench.py \
     --merged-path results/llama_experiment/sft_qlora_r128/merged
 
@@ -150,4 +221,5 @@ Primary metric: `bfcl_python_overall`.
 Experiments:
 - `baseline_eval` — baseline model comparison
 - `fine_tuning` — SFT LoRA / QLoRA runs
+- `orpo_dataset_gen` — preference dataset generation stats
 - `load_test` — latency/throughput benchmarks
